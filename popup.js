@@ -134,6 +134,37 @@ async function getFavicon(url) {
 }
 
 /**
+ * Validates a URL string by attempting different parsing strategies
+ *
+ * This function performs a two-step validation:
+ * 1. First attempts to parse the URL as-is (for URLs that already include a protocol)
+ * 2. If that fails, attempts to parse with 'https://' prefix (for URLs without a protocol)
+ *
+ * Examples:
+ * - "https://google.com" -> true (direct parse)
+ * - "google.com" -> true (parsed with https:// prefix)
+ * - "invalid url" -> false (fails both attempts)
+ * - "" -> false (empty string)
+ */
+async function isValidUrl(urlString) {
+    try {
+        try {
+            new URL(urlString);
+            return true;
+        } catch {
+            try {
+                new URL(`https://${urlString}`);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Adds a custom link with an associated icon, name, and URL input fields to the UI.
  *
  * This function creates a container for a new link entry, which includes:
@@ -155,7 +186,7 @@ async function addCustomLink(name = '', url = '') {
     newNameInput.className = 'custom-name';
     newNameInput.type = 'text';
     newNameInput.placeholder = 'site';
-    newNameInput.value = name; // Pre-fill if provided
+    newNameInput.value = name;
     newLinkContainer.appendChild(newNameInput);
 
     const newLinkInput = document.createElement('input');
@@ -171,7 +202,8 @@ async function addCustomLink(name = '', url = '') {
     deleteButton.title = 'Delete field';
     deleteButton.className = 'button-35 delete-button';
     deleteButton.addEventListener('click', () => {
-        newLinkContainer.remove(); // Remove the custom link container
+        newLinkContainer.remove();
+        if (autoSaveButton.classList.contains('auto-save-enabled')) saveAllLinks();
     });
     newLinkContainer.appendChild(deleteButton);
 
@@ -180,18 +212,41 @@ async function addCustomLink(name = '', url = '') {
     newCopyIcon.className = 'copy-icon';
     newCopyIcon.alt = 'Copy';
     newCopyIcon.addEventListener('click', () => {
-        copyToClipboard(newLinkInput.value); // Copy the link URL to the clipboard
+        copyToClipboard(newLinkInput.value);
     });
     newLinkContainer.appendChild(newCopyIcon);
 
     customLinksContainer.appendChild(newLinkContainer);
 
-    // Fetch favicon and update the icon if found
-    if (url) {
-        const favicon = await getFavicon(new URL(url).hostname);
-        if (favicon) {
-            newNameLabel.src = favicon; // Update icon if favicon is found
+    // Function to update favicon
+    const updateFavicon = async (urlToCheck) => {
+        if (!urlToCheck) {
+            newNameLabel.src = 'utils/duck.png';
+            return;
         }
+
+        if (await isValidUrl(urlToCheck)) {
+            try {
+                let urlObj;
+                try {
+                    urlObj = new URL(urlToCheck);
+                } catch {
+                    urlObj = new URL(`https://${urlToCheck}`);
+                }
+                const favicon = await getFavicon(urlObj.hostname);
+                if (favicon) {
+                    newNameLabel.src = favicon;
+                }
+            } catch (error) {
+                console.log('Error updating favicon:', error);
+                newNameLabel.src = 'utils/duck.png';
+            }
+        }
+    };
+
+    // Initial favicon update if URL is provided
+    if (url) {
+        await updateFavicon(url);
     }
 
     // Add input event listeners for auto-save functionality
@@ -204,11 +259,8 @@ async function addCustomLink(name = '', url = '') {
         if (autoSaveButton.classList.contains('auto-save-enabled')) saveAllLinks();
     });
 
-    newLinkInput.addEventListener('input', () => {
-        if (autoSaveButton.classList.contains('auto-save-enabled')) saveAllLinks();
-    });
-
-    deleteButton.addEventListener('click', () => {
+    newLinkInput.addEventListener('input', async () => {
+        await updateFavicon(newLinkInput.value);
         if (autoSaveButton.classList.contains('auto-save-enabled')) saveAllLinks();
     });
 
